@@ -1,0 +1,30 @@
+# Python bytecode, environments, and test output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Python package builds
+*.egg-info/
+/build/
+/dist/
+/wheelhouse/
+
+# CMake and native build output
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/compile_commands.json
+/Makefile
+/build.ninja
+/.ninja_deps
+/.ninja_log
+/cmake-build-*/
+
+# Local editor and operating-system files
+.vscode/
+.idea/
+.DS_Store

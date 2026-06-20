@@ -1,0 +1,20 @@
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "parakeet-cpp-py"
+version = "0.1.0"
+description = "Python bindings for the pinned whisper.cpp Parakeet CLI"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "parakeet-cpp-py contributors" }]
+
+[tool.scikit-build]
+cmake.version = ">=3.15"
+wheel.packages = ["src/parakeet_cpp"]
+sdist.include = ["CMakeLists.txt", "README.md", "src/**", "tests/**", "third_party/whisper.cpp/**", "third_party/pybind11/**"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
