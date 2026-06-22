@@ -27,6 +27,32 @@ if(NOT EXISTS "${WHISPER_SOURCE_DIR}/CMakeLists.txt" OR NOT EXISTS "${PYBIND11_S
     message(FATAL_ERROR "Pinned submodules are unavailable after initialization.")
 endif()
 
+# Apply local patches to whisper.cpp before building
+set(PATCH_FILE "${CMAKE_CURRENT_SOURCE_DIR}/patches/0001-parakeet-windowed-streaming.patch")
+if(EXISTS "${PATCH_FILE}")
+    message(STATUS "Applying patch: ${PATCH_FILE}")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" apply "${PATCH_FILE}"
+        WORKING_DIRECTORY "${WHISPER_SOURCE_DIR}"
+        RESULT_VARIABLE PATCH_RESULT
+        OUTPUT_VARIABLE PATCH_OUTPUT
+        ERROR_VARIABLE PATCH_ERROR
+    )
+    if(NOT PATCH_RESULT EQUAL 0)
+        # Patch may already be applied — check with --check
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" apply --check "${PATCH_FILE}"
+            WORKING_DIRECTORY "${WHISPER_SOURCE_DIR}"
+            RESULT_VARIABLE PATCH_CHECK_RESULT
+        )
+        if(NOT PATCH_CHECK_RESULT EQUAL 0)
+            message(FATAL_ERROR "Failed to apply patch:\n${PATCH_OUTPUT}${PATCH_ERROR}")
+        else()
+            message(STATUS "Patch already applied, skipping.")
+        endif()
+    endif()
+endif()
+
 find_program(HF_EXECUTABLE hf REQUIRED)
 
 add_custom_target(build_parakeet_cli
