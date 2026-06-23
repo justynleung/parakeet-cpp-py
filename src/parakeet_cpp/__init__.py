@@ -1,57 +1,65 @@
+"""High-level file transcription plus direct Parakeet C API bindings."""
+
 from pathlib import Path
+import subprocess
 
-from ._parakeet_cpp import Parakeet as _NativeParakeet
+from . import _parakeet_cpp as _parakeet_cpp
+from ._parakeet_cpp import *  # noqa: F401,F403
 
-_MODEL_NAME = "ggml-parakeet-tdt-0.6b-v3-q8_0.bin"
-
-
-def _repo_root():
-    return Path(__file__).resolve().parents[2]
+_MODEL_REPOSITORY = "ggml-org/parakeet-GGUF"
+_MODEL_NAME = "parakeet-tdt-0.6b-v3-f16.bin"
 
 
-def _default_paths():
-    whisper_root = _repo_root() / "third_party" / "whisper.cpp"
-    return (
-        whisper_root / "models" / _MODEL_NAME,
-        whisper_root / "build" / "bin" / "parakeet-cli",
-    )
+def _default_model_path():
+    """Resolve the default model through Hugging Face's CLI cache."""
+    try:
+        completed = subprocess.run(
+            ["hf", "download", _MODEL_REPOSITORY, _MODEL_NAME],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as error:
+        raise RuntimeError("Hugging Face CLI is unavailable; install huggingface_hub") from error
+    except subprocess.CalledProcessError as error:
+        detail = (error.stderr or error.stdout or "unknown error").strip()
+        raise RuntimeError("failed to download the default Parakeet model: {}".format(detail)) from error
+
+    model_path = Path(completed.stdout.strip())
+    if not model_path.is_file():
+        raise RuntimeError("Hugging Face CLI did not return a model file path")
+    return model_path
 
 
 class Parakeet:
-    def __init__(self):
-        model_path, cli_path = _default_paths()
-        if not model_path.is_file():
-            raise FileNotFoundError(
-                "Parakeet model is missing: {}. Download {} into third_party/whisper.cpp/models/.".format(
-                    model_path, _MODEL_NAME
-                )
-            )
-        if not cli_path.is_file() or not cli_path.stat().st_mode & 0o111:
-            raise FileNotFoundError(
-                "Parakeet CLI is missing or not executable: {}. Build it with "
-                "cmake -S third_party/whisper.cpp -B third_party/whisper.cpp/build "
-                "then cmake --build third_party/whisper.cpp/build --target parakeet-cli.".format(cli_path)
-            )
-        self._native = _NativeParakeet(str(model_path), str(cli_path))
+    """File-transcription facade backed by an in-process Parakeet context."""
+
+    def __init__(self, model_path=None, *, use_gpu=True, gpu_device=0, n_threads=None):
+        self.model_path = Path(model_path) if model_path is not None else _default_model_path()
+        if not self.model_path.is_file():
+            raise FileNotFoundError("Parakeet model is not readable: {}".format(self.model_path))
+        params = _parakeet_cpp.ContextParams()
+        params.use_gpu = use_gpu
+        params.gpu_device = gpu_device
+        self._context = _parakeet_cpp.init_from_file(str(self.model_path), params)
+        self.n_threads = n_threads
 
     def transcribe(self, audio_path, print_segments=False):
-        return self._native.transcribe(str(audio_path), print_segments)
-
-    def transcribe_stream(
-        self,
-        audio_path,
-        left_context_ms=10000,
-        chunk_ms=2000,
-        right_context_ms=2000,
-        print_segments=False,
-    ):
-        return self._native.transcribe_stream(
-            str(audio_path),
-            left_context_ms,
-            chunk_ms,
-            right_context_ms,
-            print_segments,
+        params = _parakeet_cpp.FullParams()
+        if self.n_threads is not None:
+            params.n_threads = self.n_threads
+        return _parakeet_cpp.transcribe_file(
+            self._context, str(audio_path), params, print_segments
         )
 
+    def close(self):
+        self._context.close()
 
-__all__ = ["Parakeet"]
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
+
+__all__ = [name for name in dir(_parakeet_cpp) if not name.startswith("_")] + ["Parakeet"]

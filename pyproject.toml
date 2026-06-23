@@ -5,11 +5,15 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "parakeet-cpp-py"
 version = "0.1.0"
-description = "Python bindings for the pinned whisper.cpp Parakeet CLI"
+description = "Direct Python bindings for whisper.cpp Parakeet"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
 authors = [{ name = "parakeet-cpp-py contributors" }]
+dependencies = ["numpy>=1.21", "huggingface_hub>=0.20"]
+
+[project.scripts]
+parakeet-cli = "parakeet_cpp.cli:main"
 
 [tool.scikit-build]
 cmake.version = ">=3.15"
