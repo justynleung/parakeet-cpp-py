@@ -37,5 +37,21 @@ class Parakeet:
     def transcribe(self, audio_path, print_segments=False):
         return self._native.transcribe(str(audio_path), print_segments)
 
+    def transcribe_stream(
+        self,
+        audio_path,
+        left_context_ms=10000,
+        chunk_ms=2000,
+        right_context_ms=2000,
+        print_segments=False,
+    ):
+        return self._native.transcribe_stream(
+            str(audio_path),
+            left_context_ms,
+            chunk_ms,
+            right_context_ms,
+            print_segments,
+        )
+
 
 __all__ = ["Parakeet"]

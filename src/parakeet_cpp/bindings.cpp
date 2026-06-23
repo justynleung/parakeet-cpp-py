@@ -318,6 +318,27 @@ public:
     }
 
     py::dict transcribe(const std::string & audio_path, bool print_segments) const {
+        return transcribe_with_options(audio_path, print_segments, false, 0, 0, 0);
+    }
+
+    py::dict transcribe_stream(
+            const std::string & audio_path,
+            int left_context_ms,
+            int chunk_ms,
+            int right_context_ms,
+            bool print_segments) const {
+        return transcribe_with_options(
+                audio_path, print_segments, true, left_context_ms, chunk_ms, right_context_ms);
+    }
+
+private:
+    py::dict transcribe_with_options(
+            const std::string & audio_path,
+            bool print_segments,
+            bool stream,
+            int left_context_ms,
+            int chunk_ms,
+            int right_context_ms) const {
         require_readable_file(audio_path, "audio file");
         std::vector<std::string> arguments;
         arguments.push_back(cli_path_);
@@ -326,6 +347,15 @@ public:
         arguments.push_back("--file");
         arguments.push_back(audio_path);
         arguments.push_back("--no-prints");
+        if (stream) {
+            arguments.push_back("--stream");
+            arguments.push_back("--left-context-ms");
+            arguments.push_back(std::to_string(left_context_ms));
+            arguments.push_back("--chunk-ms");
+            arguments.push_back(std::to_string(chunk_ms));
+            arguments.push_back("--right-context-ms");
+            arguments.push_back(std::to_string(right_context_ms));
+        }
         if (print_segments) {
             arguments.push_back("--print-segments");
         }
@@ -348,7 +378,6 @@ public:
         return as_dict(text, parse_segments(process.stderr_text));
     }
 
-private:
     std::string model_path_;
     std::string cli_path_;
 };
@@ -359,5 +388,13 @@ PYBIND11_MODULE(_parakeet_cpp, module) {
     module.doc() = "C++11 bindings for the Parakeet CLI";
     py::class_<Parakeet>(module, "Parakeet")
         .def(py::init<const std::string &, const std::string &>(), py::arg("model_path"), py::arg("parakeet_cli_path"))
-        .def("transcribe", &Parakeet::transcribe, py::arg("audio_path"), py::arg("print_segments") = false);
+        .def("transcribe", &Parakeet::transcribe, py::arg("audio_path"), py::arg("print_segments") = false)
+        .def(
+            "transcribe_stream",
+            &Parakeet::transcribe_stream,
+            py::arg("audio_path"),
+            py::arg("left_context_ms") = 10000,
+            py::arg("chunk_ms") = 2000,
+            py::arg("right_context_ms") = 2000,
+            py::arg("print_segments") = false);
 }

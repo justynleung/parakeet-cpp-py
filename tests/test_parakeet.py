@@ -105,6 +105,53 @@ def test_transcribe_returns_all_segment_details(model_path, audio_path, tmp_path
     ]
 
 
+def test_transcribe_stream_forwards_default_window_options(model_path, audio_path, tmp_path):
+    cli_path = make_cli(
+        tmp_path,
+        """
+        import sys
+        assert "--stream" in sys.argv
+        assert sys.argv[sys.argv.index("--left-context-ms") + 1] == "10000"
+        assert sys.argv[sys.argv.index("--chunk-ms") + 1] == "2000"
+        assert sys.argv[sys.argv.index("--right-context-ms") + 1] == "2000"
+        assert "--print-segments" not in sys.argv
+        print("streamed transcript")
+        """,
+    )
+
+    result = _NativeParakeet(str(model_path), str(cli_path)).transcribe_stream(str(audio_path))
+
+    assert result == {"text": "streamed transcript"}
+
+
+def test_transcribe_stream_forwards_custom_window_options_and_segments(model_path, audio_path, tmp_path):
+    cli_path = make_cli(
+        tmp_path,
+        """
+        import sys
+        assert sys.argv[sys.argv.index("--left-context-ms") + 1] == "8000"
+        assert sys.argv[sys.argv.index("--chunk-ms") + 1] == "1600"
+        assert sys.argv[sys.argv.index("--right-context-ms") + 1] == "2400"
+        assert "--print-segments" in sys.argv
+        print("streamed transcript")
+        sys.stderr.write('''
+        Segments (1):
+        Segment 0: [0 -> 20] "streamed transcript"
+        Tokens [0]:
+        ''')
+        """,
+    )
+
+    result = _NativeParakeet(str(model_path), str(cli_path)).transcribe_stream(
+        str(audio_path), 8000, 1600, 2400, print_segments=True
+    )
+
+    assert result == {
+        "text": "streamed transcript",
+        "segments": [{"index": 0, "t0": 0, "t1": 20, "text": "streamed transcript", "tokens": []}],
+    }
+
+
 def test_constructor_rejects_missing_or_non_executable_cli(model_path, tmp_path):
     with pytest.raises(ValueError, match="not executable"):
         _NativeParakeet(str(model_path), str(tmp_path / "missing-cli"))
@@ -134,6 +181,21 @@ def test_transcribe_reports_cli_failure(model_path, audio_path, tmp_path):
 
     with pytest.raises(RuntimeError, match="model failed"):
         _NativeParakeet(str(model_path), str(cli_path)).transcribe(str(audio_path))
+
+
+def test_transcribe_stream_reports_cli_failure_for_invalid_timing(model_path, audio_path, tmp_path):
+    cli_path = make_cli(
+        tmp_path,
+        """
+        import sys
+        assert sys.argv[sys.argv.index("--chunk-ms") + 1] == "100"
+        sys.stderr.write("invalid streaming parameters\\n")
+        raise SystemExit(1)
+        """,
+    )
+
+    with pytest.raises(RuntimeError, match="invalid streaming parameters"):
+        _NativeParakeet(str(model_path), str(cli_path)).transcribe_stream(str(audio_path), chunk_ms=100)
 
 
 def test_transcribe_rejects_malformed_segment_output(model_path, audio_path, tmp_path):
@@ -170,6 +232,33 @@ def test_public_constructor_uses_source_tree_defaults(audio_path, tmp_path, monk
     result = parakeet_cpp.Parakeet().transcribe(audio_path)
 
     assert result == {"text": "default path transcript"}
+
+
+def test_public_transcribe_stream_uses_source_tree_defaults(audio_path, tmp_path, monkeypatch):
+    repo_root = tmp_path / "repo"
+    model_path = (
+        repo_root
+        / "third_party"
+        / "whisper.cpp"
+        / "models"
+        / "ggml-parakeet-tdt-0.6b-v3-q8_0.bin"
+    )
+    model_path.parent.mkdir(parents=True)
+    model_path.write_bytes(b"model")
+    cli_path = repo_root / "third_party" / "whisper.cpp" / "build" / "bin" / "parakeet-cli"
+    cli_path.parent.mkdir(parents=True)
+    cli_path.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "assert '--stream' in sys.argv\n"
+        "print('streamed default path transcript')\n"
+    )
+    cli_path.chmod(cli_path.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setattr(parakeet_cpp, "_repo_root", lambda: repo_root)
+
+    result = parakeet_cpp.Parakeet().transcribe_stream(audio_path)
+
+    assert result == {"text": "streamed default path transcript"}
 
 
 def test_public_constructor_reports_missing_model(tmp_path, monkeypatch):
